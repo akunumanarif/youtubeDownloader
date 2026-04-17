@@ -118,11 +118,22 @@ def build_ydl_opts(format_type: str, quality: str, output_dir: Path, progress_ho
         }
     else:
         if quality == "best":
-            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+            fmt = (
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+                "/bestvideo+bestaudio"
+                "/best[ext=mp4]"
+                "/best"
+            )
         else:
             fmt = (
                 f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]"
-                f"/bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
+                f"/bestvideo[height<={quality}]+bestaudio"
+                f"/best[height<={quality}][ext=mp4]"
+                f"/best[height<={quality}]"
+                # fallback: ignore quality constraint if nothing matches (e.g. Shorts)
+                "/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+                "/bestvideo+bestaudio"
+                "/best"
             )
         return {
             "format": fmt,
