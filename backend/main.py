@@ -39,6 +39,8 @@ class DownloadRequest(BaseModel):
 @app.post("/api/info")
 async def get_info(request: InfoRequest):
     try:
+        # Always use extract_flat to avoid format resolution errors.
+        # Quality options are fixed — yt-dlp resolves the best available at download time.
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
@@ -65,34 +67,14 @@ async def get_info(request: InfoRequest):
                 "audio_qualities": ["best", "320", "192", "128"],
             }
         else:
-            # For single video, re-fetch with full format info
-            full_opts = {"quiet": True, "no_warnings": True}
-            with yt_dlp.YoutubeDL(full_opts) as ydl:
-                info = ydl.extract_info(request.url, download=False)
-
-            formats = info.get("formats", [])
-            video_heights = sorted(
-                set(
-                    f.get("height")
-                    for f in formats
-                    if f.get("height") and f.get("vcodec", "none") != "none"
-                ),
-                reverse=True,
-            )
-            video_qualities = [str(h) for h in video_heights if h]
-            if not video_qualities:
-                video_qualities = ["best"]
-            else:
-                video_qualities = ["best"] + video_qualities
-
             return {
                 "type": "video",
-                "title": info.get("title", ""),
+                "title": info.get("title", "") or info.get("fulltitle", ""),
                 "duration": info.get("duration", 0),
                 "thumbnail": info.get("thumbnail", ""),
-                "uploader": info.get("uploader", ""),
+                "uploader": info.get("uploader", "") or info.get("channel", ""),
                 "view_count": info.get("view_count", 0),
-                "video_qualities": video_qualities,
+                "video_qualities": ["best", "1080", "720", "480", "360"],
                 "audio_qualities": ["best", "320", "192", "128"],
             }
     except Exception as e:
