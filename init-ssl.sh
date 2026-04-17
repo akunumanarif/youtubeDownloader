@@ -6,42 +6,46 @@
 set -e
 
 DOMAIN="ytdownloader.numanarif.dev"
-EMAIL="untukdummy687@gmail.com"   # <-- change this to your email
+EMAIL="untukdummy687@gmail.com"
 
-echo "==> [1/4] Starting nginx with HTTP-only config for ACME challenge..."
-docker compose -f docker-compose.yml run --rm --no-deps \
-  -v "$(pwd)/nginx/app-init.conf:/etc/nginx/conf.d/default.conf:ro" \
+echo "==> [1/3] Stopping any running containers (freeing port 80)..."
+docker compose down 2>/dev/null || true
+
+echo "==> [2/3] Requesting Let's Encrypt certificate (standalone mode)..."
+# Certbot standalone: creates its own temporary HTTP server on port 80.
+# No nginx needed at this stage.
+docker compose run --rm --no-deps \
   -p 80:80 \
-  nginx nginx -g "daemon off;" &
+  --entrypoint "certbot" \
+  certbot certonly \
+    --standalone \
+    --email "$EMAIL" \
+    --agree-tos \
+    --no-eff-email \
+    -d "$DOMAIN"
 
-NGINX_PID=$!
-sleep 3
-
-echo "==> [2/4] Requesting Let's Encrypt certificate for $DOMAIN..."
-docker compose run --rm certbot certbot certonly \
-  --webroot \
-  --webroot-path /var/www/certbot \
-  --email "$EMAIL" \
-  --agree-tos \
-  --no-eff-email \
-  -d "$DOMAIN"
-
-echo "==> [3/4] Downloading recommended SSL parameters..."
-docker compose run --rm certbot sh -c "
-  if [ ! -f /etc/letsencrypt/options-ssl-nginx.conf ]; then
-    wget -q https://raw.githubusercontent.com/certbot/certbot/master/certbot-nginx/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf \
-      -O /etc/letsencrypt/options-ssl-nginx.conf
-  fi
-  if [ ! -f /etc/letsencrypt/ssl-dhparams.pem ]; then
-    openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
-  fi
-"
-
-echo "==> [4/4] Stopping temporary nginx..."
-kill $NGINX_PID 2>/dev/null || true
-wait $NGINX_PID 2>/dev/null || true
+echo "==> [3/3] Creating required SSL support files..."
+docker compose run --rm --no-deps \
+  --entrypoint "sh" \
+  certbot -c "
+    set -e
+    # Download Certbot's recommended nginx SSL options
+    if [ ! -f /etc/letsencrypt/options-ssl-nginx.conf ]; then
+      echo 'Downloading options-ssl-nginx.conf...'
+      wget -q https://raw.githubusercontent.com/certbot/certbot/master/certbot-nginx/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf \
+        -O /etc/letsencrypt/options-ssl-nginx.conf
+    fi
+    # Generate Diffie-Hellman params (takes ~1 min)
+    if [ ! -f /etc/letsencrypt/ssl-dhparams.pem ]; then
+      echo 'Generating DH params (this may take a minute)...'
+      openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+    fi
+    echo 'SSL support files ready.'
+  "
 
 echo ""
-echo "SSL certificate obtained successfully!"
-echo "Now start the full stack with:"
-echo "  docker compose up -d"
+echo "=========================================="
+echo " SSL certificate obtained successfully!"
+echo " Now start the full stack with:"
+echo "   docker compose up -d"
+echo "=========================================="
