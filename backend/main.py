@@ -22,6 +22,7 @@ app.add_middleware(
 
 DOWNLOADS_DIR = Path(os.getenv("DOWNLOADS_DIR", "/app/downloads"))
 DOWNLOADS_DIR.mkdir(exist_ok=True)
+FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend"))
 
 tasks: Dict[str, Dict[str, Any]] = {}
 
@@ -258,3 +259,26 @@ async def get_file(task_id: str, background_tasks: BackgroundTasks):
         filename=filename,
         media_type="application/octet-stream",
     )
+
+
+@app.get("/")
+async def serve_index():
+    index_path = FRONTEND_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    return FileResponse(str(index_path))
+
+
+@app.get("/{asset_path:path}")
+async def serve_frontend_asset(asset_path: str):
+    requested_path = (FRONTEND_DIR / asset_path).resolve()
+    frontend_root = FRONTEND_DIR.resolve()
+
+    if frontend_root in requested_path.parents and requested_path.is_file():
+        return FileResponse(str(requested_path))
+
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+
+    raise HTTPException(status_code=404, detail="Frontend not found")
